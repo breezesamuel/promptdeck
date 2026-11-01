@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PromptDeck — BYOK Multi-Model Chat Workbench</title>
+<meta name="description" content="Free, private, BYOK chat workbench: bring your own API key, manage prompt library locally, run one prompt across multiple models side-by-side. No server, no account, your keys never leave your browser.">
+<style>
+:root{--bg:#0f1115;--panel:#171a21;--panel2:#1d212b;--bd:#2a2f3c;--tx:#e6e9f0;--dim:#8b93a7;--ac:#5b8cff;--ok:#3fbf7f;--er:#ff6b6b}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--tx);font:14px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--bd);flex-wrap:wrap}
+.logo{font-weight:700;font-size:15px;letter-spacing:.5px}
+.logo b{color:var(--ac)}
+.badge{font-size:10px;color:var(--dim);border:1px solid var(--bd);border-radius:10px;padding:1px 8px}
+header .sp{flex:1}
+button{background:var(--panel2);color:var(--tx);border:1px solid var(--bd);border-radius:8px;padding:5px 12px;cursor:pointer;font-size:13px}
+button:hover{border-color:var(--ac)}
+button.pri{background:var(--ac);border-color:var(--ac);color:#fff}
+button.mini{padding:2px 8px;font-size:11px;border-radius:6px}
+input,select,textarea{background:var(--panel2);border:1px solid var(--bd);color:var(--tx);border-radius:8px;padding:6px 10px;font-size:13px;outline:none}
+input:focus,textarea:focus{border-color:var(--ac)}
+main{flex:1;display:flex;min-height:0}
+#side{width:250px;background:var(--panel);border-right:1px solid var(--bd);display:flex;flex-direction:column;min-width:0}
+#side .tabs{display:flex;border-bottom:1px solid var(--bd)}
+#side .tabs button{flex:1;border:none;border-radius:0;background:none;padding:9px;color:var(--dim)}
+#side .tabs button.on{color:var(--tx);border-bottom:2px solid var(--ac)}
+#side .list{flex:1;overflow:auto;padding:6px}
+.item{padding:8px 10px;border-radius:8px;cursor:pointer;display:flex;justify-content:space-between;gap:6px;align-items:center;color:var(--dim)}
+.item:hover{background:var(--panel2)}
+.item.on{background:var(--panel2);color:var(--tx)}
+.item .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#side .foot{padding:8px;border-top:1px solid var(--bd);display:flex;gap:6px}
+#side .foot button{flex:1}
+#chat{flex:1;display:flex;flex-direction:column;min-width:0}
+#models{display:flex;gap:6px;align-items:center;padding:8px 14px;border-bottom:1px solid var(--bd);flex-wrap:wrap;background:var(--panel)}
+.chip{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--bd);border-radius:16px;padding:3px 10px;font-size:12px;cursor:pointer;color:var(--dim)}
+.chip.on{border-color:var(--ac);color:var(--tx);background:rgba(91,140,255,.12)}
+#msgs{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+.card{border:1px solid var(--bd);border-radius:10px;background:var(--panel);padding:10px 14px;max-width:860px;white-space:pre-wrap;word-break:break-word}
+.card.user{align-self:flex-end;background:#1c2740;border-color:#2c3a5c}
+.card .who{font-size:11px;color:var(--dim);margin-bottom:4px;display:flex;gap:8px;flex-wrap:wrap}
+.cmp{display:grid;gap:10px;align-self:stretch}
+.err{border-color:var(--er);color:#ffb3b3}
+#inputbar{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--bd);background:var(--panel)}
+#inp{flex:1;resize:none;height:64px}
+dialog{background:var(--panel);color:var(--tx);border:1px solid var(--bd);border-radius:12px;padding:18px;min-width:320px;max-width:560px;max-height:85vh;overflow:auto}
+dialog::backdrop{background:rgba(0,0,0,.55)}
+dialog h3{margin-bottom:10px;font-size:15px}
+.frow{margin-bottom:10px}
+.frow label{display:block;font-size:12px;color:var(--dim);margin-bottom:4px}
+.frow input,.frow select,.frow textarea{width:100%}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.plist .pitem{border:1px solid var(--bd);border-radius:8px;padding:8px 10px;margin-bottom:6px;cursor:pointer}
+.plist .pitem:hover{border-color:var(--ac)}
+.plist .pitem b{font-size:13px}
+.plist .pitem .pv{font-size:11px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hint{font-size:11px;color:var(--dim)}
+.warn{font-size:12px;color:#ffd27d}
+@media(max-width:760px){#side{position:absolute;z-index:9;height:100%;display:none}#side.open{display:flex}main{position:relative}}
+</style>
+</head>
+<body>
+<header>
+  <span class="logo">Prompt<b>Deck</b></span>
+  <span class="badge" data-i="byok">BYOK · 本地存储 · 无服务器</span>
+  <span class="sp"></span>
+  <button class="mini" id="btnMenu" style="display:none">☰</button>
+  <button class="mini" id="btnProv" data-i="providers">模型源</button>
+  <button class="mini" id="btnPrompts" data-i="prompts">提示词库</button>
+  <button class="mini" id="btnExport" data-i="export">导出</button>
+  <button class="mini" id="btnImport" data-i="import">导入</button>
+  <button class="mini" id="btnLang">EN</button>
+</header>
+<main>
+  <div id="side">
+    <div class="tabs">
+      <button id="tabChats" class="on" data-i="chats">会话</button>
+      <button id="tabPrompts2" data-i="prompts">提示词</button>
+    </div>
+    <div class="list" id="listChats"></div>
+    <div class="list" id="listPrompts" style="display:none"></div>
+    <div class="foot">
+      <button id="btnNewChat" data-i="newChat">＋新会话</button>
+      <button id="btnNewPrompt" data-i="newPrompt">＋新提示词</button>
+    </div>
+  </div>
+  <div id="chat">
+    <div id="models"></div>
+    <div id="msgs"></div>
+    <div id="inputbar">
+      <textarea id="inp" placeholder="Enter 发送 · Shift+Enter 换行"></textarea>
+      <button class="pri" id="btnSend" data-i="send">发送</button>
+    </div>
+  </div>
+</main>
+
+<dialog id="dlgProv"><h3 data-i="provTitle">模型源（API Key 只存本地浏览器）</h3>
+  <div id="provList" class="plist"></div>
+  <div class="frow"><button class="mini" id="btnAddProv" data-i="addProv">＋添加模型源</button>
+  <span class="hint" data-i="provHint">内置预设：GLM / DeepSeek / SiliconFlow / Kimi / OpenAI / Groq / 讯飞MaaS / Ollama</span></div>
+  <div style="text-align:right"><button onclick="dlgProv.close()">OK</button></div>
+</dialog>
+
+<dialog id="dlgProvEdit"><h3 data-i="provEdit">编辑模型源</h3>
+  <div class="grid2">
+    <div class="frow"><label data-i="fName">名称</label><input id="pf_name"></div>
+    <div class="frow"><label>Base URL</label><input id="pf_base" placeholder="https://open.bigmodel.cn/api/paas/v4"></div>
+  </div>
+  <div class="frow"><label>API Key</label><input id="pf_key" type="password" placeholder="sk-..."></div>
+  <div class="frow"><label data-i="fModels">模型（逗号分隔）</label><input id="pf_models" placeholder="glm-4-flash, glm-4-plus"></div>
+  <div class="frow"><button class="mini pri" id="btnTestProv" data-i="test">测试连通</button> <span id="testOut" class="hint"></span></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end">
+    <button id="btnDelProv" class="mini" style="color:var(--er)" data-i="del">删除</button>
+    <button id="btnSaveProv" class="pri" data-i="save">保存</button>
+  </div>
+</dialog>
+
+<dialog id="dlgPrompt"><h3 data-i="promptEdit">提示词</h3>
+  <div class="frow"><label data-i="fTitle">标题</label><input id="pm_title"></div>
+  <div class="frow"><label data-i="fBody">内容（支持 {{变量}} 占位）</label><textarea id="pm_body" rows="8"></textarea></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end">
+    <button id="btnDelPrompt" class="mini" style="color:var(--er)" data-i="del">删除</button>
+    <button id="btnSavePrompt" class="pri" data-i="save">保存</button>
+  </div>
+</dialog>
+
+<dialog id="dlgVars"><h3 data-i="fillVars">填入变量</h3><div id="varsBox"></div>
+  <div style="text-align:right;margin-top:10px"><button class="pri" id="btnVarsGo" data-i="inject">注入到输入框</button></div>
+</dialog>
+
+<dialog id="dlgImport"><h3 data-i="importTitle">导入 JSON（会话+提示词+模型源）</h3>
+  <div class="frow"><textarea id="impText" rows="8" placeholder='{"chats":[...],"prompts":[...]}'></textarea></div>
+  <div class="frow"><input type="file" id="impFile" accept=".json"></div>
+  <div style="text-align:right"><button class="pri" id="btnImpGo" data-i="import">导入</button></div>
+</dialog>
+
+<script>
+'use strict';
+/* ============ i18n ============ */
+const I18N = {
+  zh:{byok:'BYOK · 本地存储 · 无服务器',providers:'模型源',prompts:'提示词库',export:'导出',import:'导入',
+    chats:'会话',newChat:'＋新会话',newPrompt:'＋新提示词',send:'发送',provTitle:'模型源（API Key 只存本地浏览器）',
+    provEdit:'编辑模型源',promptEdit:'提示词',fillVars:'填入变量',inject:'注入到输入框',
+    importTitle:'导入 JSON（会话+提示词+模型源）',addProv:'＋添加模型源',test:'测试连通',del:'删除',save:'保存',
+    fName:'名称',fModels:'模型（逗号分隔）',fTitle:'标题',fBody:'内容（支持 {{变量}} 占位）',
+    empty:'← 先在「模型源」里添加一个 API Key，开始对话',cmpNote:'对比模式：同一条提示并行发给所有选中的模型',
+    noKey:'未配置 Key',ok:'连通 ✓',fail:'失败',streaming:'生成中…',copied:'已复制',
+    you:'你',sysNote:'提示词已注入',delConfirm:'确认删除？',needModel:'先在顶部选择至少一个模型',
+    selModel:'选模型',testOk:'连通成功',testFail:'失败：'},
+  en:{byok:'BYOK · local-only · serverless',providers:'Providers',prompts:'Prompt Library',export:'Export',import:'Import',
+    chats:'Chats',newChat:'＋New Chat',newPrompt:'＋New Prompt',send:'Send',provTitle:'Providers (keys stored in your browser only)',
+    provEdit:'Edit Provider',promptEdit:'Prompt',fillVars:'Fill variables',inject:'Inject to input',
+    importTitle:'Import JSON (chats+prompts+providers)',addProv:'＋Add Provider',test:'Test',del:'Delete',save:'Save',
+    fName:'Name',fModels:'Models (comma separated)',fTitle:'Title',fBody:'Body ({{var}} placeholders supported)',
+    empty:'← Add a provider with your API key to start',cmpNote:'Compare mode: one prompt runs on all selected models in parallel',
+    noKey:'no key',ok:'connected ✓',fail:'failed',streaming:'streaming…',copied:'copied',
+    you:'You',sysNote:'Prompt injected',delConfirm:'Delete?',needModel:'Select at least one model on top',
+    selModel:'Select model',testOk:'Connection OK',testFail:'Failed: '}
+};
+let lang = localStorage.getItem('pd1_lang') || 'zh';
+const T = k => (I18N[lang] && I18N[lang][k]) || I18N.zh[k] || k;
+
+/* ============ 预设 ============ */
+const PRESETS = [
+  {n:'GLM 智谱', b:'https://open.bigmodel.cn/api/paas/v4', m:'glm-4-flash, glm-4-plus, glm-4.5-flash'},
+  {n:'DeepSeek', b:'https://api.deepseek.com/v1', m:'deepseek-chat, deepseek-reasoner'},
+  {n:'SiliconFlow', b:'https://api.siliconflow.cn/v1', m:'Qwen/Qwen2.5-7B-Instruct'},
+  {n:'Kimi 月之暗面', b:'https://api.moonshot.cn/v1', m:'moonshot-v1-8k'},
+  {n:'讯飞星辰 MaaS', b:'https://maas-api.xfyun.cn/v1', m:'Spark-X2.6'},
+  {n:'OpenAI', b:'https://api.openai.com/v1', m:'gpt-4o-mini'},
+  {n:'Groq', b:'https://api.groq.com/openai/v1', m:'llama-3.1-8b-instant'},
+  {n:'Ollama 本地', b:'http://localhost:11434/v1', m:'qwen2.5:7b'}
+];
+
+/* ============ 存储 ============ */
+const LS = {
+  get(k, d){ try{ const v = localStorage.getItem('pd1_'+k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
+  set(k, v){ localStorage.setItem('pd1_'+k, JSON.stringify(v)); }
+};
+let providers = LS.get('providers', []);
+let chats     = LS.get('chats', []);
+let prompts   = LS.get('prompts', [
+  {id:'p1', title:'翻译中英互译', body:'请把下面的内容在中文和英文之间互译，保留格式，只输出译文：\n\n{{text}}'},
+  {id:'p2', title:'周报生成器', body:'你是我的工作助理。根据以下流水记录，生成一份简洁的本周工作周报（分：本周完成/数据亮点/下周计划）：\n\n{{log}}'},
+  {id:'p3', title:'多模型评审', body:'请以严格的资深评审身份，指出下面内容的 3 个最主要问题并给出修改建议：\n\n{{draft}}'}
+]);
+let curChat = LS.get('curChat', null);
+let sel = LS.get('sel', []);   // 选中的 model 引用 ["provId|model", ...]
+
+const save = () => { LS.set('providers', providers); LS.set('chats', chats);
+  LS.set('prompts', prompts); LS.set('curChat', curChat); LS.set('sel', sel); };
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+/* ============ UI 基础 ============ */
+const $ = s => document.querySelector(s);
+function applyI18n(){
+  document.querySelectorAll('[data-i]').forEach(el => { el.textContent = T(el.dataset.i); });
+  $('#btnLang').textContent = lang === 'zh' ? 'EN' : '中';
+  $('#inp').placeholder = 'Enter ↵ ' + T('send') + ' · Shift+Enter';
+  renderModels(); renderChats(); renderPrompts(); renderMsgs();
+}
+$('#btnLang').onclick = () => { lang = lang === 'zh' ? 'en' : 'zh';
+  localStorage.setItem('pd1_lang', lang); applyI18n(); };
+
+/* ============ 模型条 ============ */
+function renderModels(){
+  const box = $('#models'); box.innerHTML = '';
+  const all = [];
+  providers.forEach(p => (p.models || []).forEach(m => all.push({p, m})));
+  if(!all.length){
+    box.innerHTML = '<span class="hint">' + T('empty') + '</span>';
+    return;
+  }
+  all.forEach(({p, m}) => {
+    const key = p.id + '|' + m;
+    const c = document.createElement('span');
+    c.className = 'chip' + (sel.includes(key) ? ' on' : '');
+    c.textContent = p.name + ' · ' + m;
+    c.onclick = () => {
+      if(sel.includes(key)) sel = sel.filter(x => x !== key);
+      else { if(sel.length >= 4) sel.shift(); sel.push(key); }
+      save(); renderModels();
+    };
+    box.appendChild(c);
+  });
+  const note = document.createElement('span');
+  note.className = 'hint';
+  note.textContent = sel.length > 1 ? T('cmpNote') : '';
+  box.appendChild(note);
+}
+
+/* ============ 会话 ============ */
+function renderChats(){
+  const box = $('#listChats'); box.innerHTML = '';
+  chats.slice().reverse().forEach(c => {
+    const d = document.createElement('div');
+    d.className = 'item' + (c.id === curChat ? ' on' : '');
+    d.innerHTML = '<span class="nm">' + esc(c.title || '...') + '</span>';
+    const x = document.createElement('button'); x.className = 'mini'; x.textContent = '×';
+    x.onclick = e => { e.stopPropagation();
+      if(!confirm(T('delConfirm'))) return;
+      chats = chats.filter(y => y.id !== c.id);
+      if(curChat === c.id) curChat = chats.length ? chats[chats.length-1].id : null;
+      save(); renderChats(); renderMsgs(); };
+    d.appendChild(x);
+    d.onclick = () => { curChat = c.id; save(); renderChats(); renderMsgs(); };
+    box.appendChild(d);
+  });
+}
+function renderMsgs(){
+  const box = $('#msgs'); box.innerHTML = '';
+  const c = chats.find(x => x.id === curChat);
+  if(!c || !c.msgs.length){
+    box.innerHTML = '<div class="hint" style="margin:auto">' + T('empty') + '</div>';
+    return;
+  }
+  c.msgs.forEach(m => {
+    if(m.role === 'user'){
+      box.appendChild(card(T('you'), m.content, 'user'));
+    } else if(m.role === 'assistant' && m.results){
+      box.appendChild(compareCard(m.results, m.ts));
+    } else if(m.role === 'assistant'){
+      box.appendChild(card(m.model || 'AI', m.content));
+    }
+  });
+  box.scrollTop = box.scrollHeight;
+}
+function card(who, text, cls, extraCls){
+  const d = document.createElement('div');
+  d.className = 'card ' + (cls || '') + (extraCls ? ' ' + extraCls : '');
+  const w = document.createElement('div'); w.className = 'who'; w.textContent = who;
+  const b = document.createElement('div'); b.textContent = text;
+  d.appendChild(w); d.appendChild(b);
+  return d;
+}
+function compareCard(results, ts){
+  const n = results.length;
+  const g = document.createElement('div');
+  g.className = 'cmp';
+  g.style.gridTemplateColumns = n <= 2 ? '1fr' + (n === 2 ? ' 1fr' : '') :
+    (n === 3 ? '1fr 1fr 1fr' : '1fr 1fr');
+  if(window.innerWidth < 760) g.style.gridTemplateColumns = '1fr';
+  results.forEach(r => {
+    g.appendChild(card(r.model, r.content || ('(' + T('fail') + ')'), '', r.error ? 'err' : ''));
+  });
+  const w = document.createElement('div'); w.className = 'card'; w.style.alignSelf = 'stretch';
+  w.appendChild(g);
+  return w;
+}
+const esc = s => String(s || '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ============ 发送（SSE 流式 + 并行对比） ============ */
+async function callModel(p, model, messages, onDelta){
+  const res = await fetch(p.base.replace(/\/$/, '') + '/chat/completions', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + (p.key || 'ollama')},
+    body: JSON.stringify({model, messages, stream: true})
+  });
+  if(!res.ok){
+    const t = await res.text().catch(() => '');
+    throw new Error('HTTP ' + res.status + ' ' + t.slice(0, 160));
+  }
+  const rd = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '', full = '';
+  while(true){
+    const {done, value} = await rd.read();
+    if(done) break;
+    buf += dec.decode(value, {stream: true});
+    const lines = buf.split('\n');
+    buf = lines.pop();
+    for(const ln of lines){
+      const s = ln.trim();
+      if(!s.startsWith('data:')) continue;
+      const data = s.slice(5).trim();
+      if(data === '[DONE]') continue;
+      try{
+        const j = JSON.parse(data);
+        const d = (j.choices && j.choices[0] && (j.choices[0].delta || j.choices[0].message)) || {};
+        const piece = d.content || '';
+        if(piece){ full += piece; onDelta && onDelta(full); }
+      }catch(e){}
+    }
+  }
+  return full;
+}
+
+async function send(){
+  const text = $('#inp').value.trim();
+  if(!text) return;
+  if(!sel.length){ alert(T('needModel')); return; }
+  if(!curChat || !chats.find(x => x.id === curChat)){
+    chats.push({id: uid(), title: text.slice(0, 24), msgs: []});
+    curChat = chats[chats.length-1].id;
+  }
+  const c = chats.find(x => x.id === curChat);
+  c.msgs.push({role: 'user', content: text, ts: Date.now()});
+  $('#inp').value = '';
+  save(); renderChats();
+
+  const hist = c.msgs.filter(m => m.role === 'user' || m.role === 'assistant')
+    .slice(-12).map(m => ({role: m.role === 'user' ? 'user' : 'assistant',
+      content: typeof m.content === 'string' ? m.content : '[compare]'}));
+  const targets = sel.map(k => {
+    const [pid, ...rest] = k.split('|');
+    const model = rest.join('|');
+    return {p: providers.find(x => x.id === pid), model};
+  }).filter(t => t.p);
+
+  const rec = {role: 'assistant', results: targets.map(t => ({model: t.p.name + '·' + t.model, content: '', error: ''})), ts: Date.now()};
+  c.msgs.push(rec);
+  save();
+  // 先渲染占位
+  const box = $('#msgs');
+  const live = compareCard(rec.results.map(r => ({model: r.model, content: T('streaming')})));
+  box.appendChild(live); box.scrollTop = box.scrollHeight;
+
+  await Promise.all(targets.map(async (t, i) => {
+    try{
+      const full = await callModel(t.p, t.model, [{role:'system', content:'You are a helpful assistant.'}, ...hist],
+        txt => { rec.results[i].content = txt;
+          const cell = live.querySelectorAll('.card .card, .cmp > .card')[i];
+          if(cell) cell.lastChild.textContent = txt; });
+      rec.results[i].content = full || '(empty)';
+    }catch(e){
+      rec.results[i].error = '1';
+      rec.results[i].content = String(e.message || e).slice(0, 300) +
+        (String(e).includes('Failed to fetch') ? '\n\n[CORS/网络] 若是本地 Ollama：需设置 OLLAMA_ORIGINS=*；其他模型源请检查 Base URL/Key。' : '');
+    }
+    save();
+  }));
+  live.remove(); renderMsgs();
+}
+$('#btnSend').onclick = send;
+$('#inp').addEventListener('keydown', e => {
+  if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); send(); }
+});
+
+/* ============ 模型源管理 ============ */
+$('#btnProv').onclick = () => { renderProvList(); dlgProv.showModal(); };
+function renderProvList(){
+  const box = $('#provList'); box.innerHTML = '';
+  if(!providers.length) box.innerHTML = '<div class="hint">—</div>';
+  providers.forEach(p => {
+    const d = document.createElement('div'); d.className = 'pitem';
+    d.innerHTML = '<b>' + esc(p.name) + '</b> <span class="pv">' + esc(p.base) +
+      ' · ' + (p.key ? '🔑' : T('noKey')) + '</span>';
+    d.onclick = () => openProvEdit(p.id);
+    box.appendChild(d);
+  });
+}
+let editPid = null;
+function openProvEdit(id, preset){
+  editPid = id || null;
+  const p = providers.find(x => x.id === id) || preset || {name:'', base:'', key:'', models:[]};
+  $('#pf_name').value = p.name; $('#pf_base').value = p.base;
+  $('#pf_key').value = p.key || ''; $('#pf_models').value = (p.models || []).join(', ');
+  $('#testOut').textContent = '';
+  $('#btnDelProv').style.display = id ? '' : 'none';
+  dlgProvEdit.showModal();
+}
+$('#btnAddProv').onclick = () => {
+  const name = prompt('选择预设序号:\n' + PRESETS.map((p, i) => (i+1) + '. ' + p.n + ' (' + p.b + ')').join('\n') + '\n0. 自定义\n输入序号:');
+  if(name === null) return;
+  const i = +name === 0 ? -1 : +name - 1;
+  if(i >= 0 && PRESETS[i]) openProvEdit(null, {name: PRESETS[i].n, base: PRESETS[i].b, models: PRESETS[i].m.split(',').map(s => s.trim())});
+  else openProvEdit(null);
+};
+$('#btnTestProv').onclick = async () => {
+  const p = {base: $('#pf_base').value.trim(), key: $('#pf_key').value.trim(),
+             models: $('#pf_models').value.split(',').map(s => s.trim()).filter(Boolean)};
+  if(!p.base || !p.models[0]){ $('#testOut').textContent = 'base/model?'; return; }
+  $('#testOut').textContent = '...';
+  try{
+    const res = await fetch(p.base.replace(/\/$/, '') + '/chat/completions', {
+      method: 'POST', headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (p.key || 'ollama')},
+      body: JSON.stringify({model: p.models[0], messages: [{role:'user', content:'ping'}], max_tokens: 1})});
+    $('#testOut').textContent = res.ok ? T('testOk') : T('testFail') + 'HTTP ' + res.status;
+  }catch(e){ $('#testOut').textContent = T('testFail') + (String(e).includes('Failed to fetch') ? 'CORS/网络' : e); }
+};
+$('#btnSaveProv').onclick = () => {
+  const p = {name: $('#pf_name').value.trim() || 'P', base: $('#pf_base').value.trim(),
+             key: $('#pf_key').value.trim(),
+             models: $('#pf_models').value.split(',').map(s => s.trim()).filter(Boolean)};
+  if(!p.base){ alert('Base URL?'); return; }
+  if(editPid){ Object.assign(providers.find(x => x.id === editPid), p); }
+  else { p.id = uid(); providers.push(p); }
+  sel = sel.filter(k => providers.some(x => x.id + '|' === k.slice(0, x.id.length + 1)));
+  save(); renderProvList(); renderModels();
+  dlgProvEdit.close();
+};
+$('#btnDelProv').onclick = () => {
+  if(editPid && confirm(T('delConfirm'))){
+    providers = providers.filter(x => x.id !== editPid);
+    sel = sel.filter(k => !k.startsWith(editPid + '|'));
+    save(); renderProvList(); renderModels(); dlgProvEdit.close();
+  }
+};
+
+/* ============ 提示词库 ============ */
+$('#btnPrompts').onclick = () => { switchTab('prompts'); };
+$('#tabChats').onclick = () => switchTab('chats');
+$('#tabPrompts2').onclick = () => switchTab('prompts');
+function switchTab(t){
+  $('#tabChats').className = t === 'chats' ? 'on' : '';
+  $('#tabPrompts2').className = t === 'prompts' ? 'on' : '';
+  $('#listChats').style.display = t === 'chats' ? '' : 'none';
+  $('#listPrompts').style.display = t === 'prompts' ? '' : 'none';
+  $('#btnNewChat').style.display = t === 'chats' ? '' : 'none';
+  $('#btnNewPrompt').style.display = t === 'prompts' ? '' : 'none';
+}
+function renderPrompts(){
+  const box = $('#listPrompts'); box.innerHTML = '';
+  prompts.forEach(p => {
+    const d = document.createElement('div'); d.className = 'item';
+    d.innerHTML = '<span class="nm">' + esc(p.title) + '</span>';
+    const e = document.createElement('button'); e.className = 'mini'; e.textContent = '✎';
+    e.onclick = ev => { ev.stopPropagation(); openPromptEdit(p.id); };
+    d.appendChild(e);
+    d.onclick = () => injectPrompt(p.id);
+    box.appendChild(d);
+  });
+}
+let editPmid = null;
+function openPromptEdit(id){
+  editPmid = id || null;
+  const p = prompts.find(x => x.id === id) || {title: '', body: ''};
+  $('#pm_title').value = p.title; $('#pm_body').value = p.body;
+  $('#btnDelPrompt').style.display = id ? '' : 'none';
+  dlgPrompt.showModal();
+}
+$('#btnNewPrompt').onclick = () => openPromptEdit(null);
+$('#btnSavePrompt').onclick = () => {
+  const p = {title: $('#pm_title').value.trim() || '...', body: $('#pm_body').value};
+  if(editPmid) Object.assign(prompts.find(x => x.id === editPmid), p);
+  else { p.id = uid(); prompts.push(p); }
+  save(); renderPrompts(); dlgPrompt.close();
+};
+$('#btnDelPrompt').onclick = () => {
+  if(editPmid && confirm(T('delConfirm'))){
+    prompts = prompts.filter(x => x.id !== editPmid);
+    save(); renderPrompts(); dlgPrompt.close();
+  }
+};
+function injectPrompt(id){
+  const p = prompts.find(x => x.id === id);
+  if(!p) return;
+  const vars = [...new Set((p.body.match(/{{\s*(\w+)\s*}}/g) || []).map(s => s.replace(/[{}]/g, '').trim()))];
+  if(!vars.length){ $('#inp').value = p.body; $('#inp').focus(); return; }
+  $('#varsBox').innerHTML = vars.map(v =>
+    '<div class="frow"><label>' + esc(v) + '</label><textarea rows="3" data-var="' + esc(v) + '"></textarea></div>').join('');
+  $('#btnVarsGo').onclick = () => {
+    let b = p.body;
+    $('#varsBox').querySelectorAll('[data-var]').forEach(t => {
+      b = b.split('{{' + t.dataset.var + '}}').join(t.value);
+      b = b.split('{{ ' + t.dataset.var + ' }}').join(t.value);
+    });
+    $('#inp').value = b; $('#inp').focus(); dlgVars.close();
+  };
+  dlgVars.showModal();
+}
+
+/* ============ 新会话/导出/导入 ============ */
+$('#btnNewChat').onclick = () => {
+  const c = {id: uid(), title: (lang === 'zh' ? '新会话 ' : 'Chat ') + (chats.length + 1), msgs: []};
+  chats.push(c); curChat = c.id; save(); renderChats(); renderMsgs(); switchTab('chats');
+};
+$('#btnExport').onclick = () => {
+  const blob = new Blob([JSON.stringify({chats, prompts, providers: providers.map(p => ({...p, key: ''}))}, null, 2)],
+    {type: 'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'promptdeck_' + new Date().toISOString().slice(0, 10) + '.json';
+  a.click();
+};
+$('#btnImport').onclick = () => dlgImport.showModal();
+$('#impFile').onchange = e => {
+  const f = e.target.files[0];
+  if(f){ const r = new FileReader(); r.onload = () => $('#impText').value = r.result; r.readAsText(f); }
+};
+$('#btnImpGo').onclick = () => {
+  try{
+    const j = JSON.parse($('#impText').value);
+    if(j.chats) chats = j.chats.concat(chats);
+    if(j.prompts) prompts = j.prompts.filter(p => !prompts.some(x => x.id === p.id)).concat(prompts);
+    if(j.providers) j.providers.forEach(p => { if(p.base && !providers.some(x => x.base === p.base)){ p.id = uid(); providers.push(p); } });
+    save(); renderChats(); renderPrompts(); renderModels(); dlgImport.close();
+  }catch(e){ alert('JSON error: ' + e); }
+};
+
+/* ============ 移动端 ============ */
+if(window.innerWidth < 760){
+  $('#btnMenu').style.display = '';
+  $('#btnMenu').onclick = () => $('#side').classList.toggle('open');
+}
+
+applyI18n();
+switchTab('chats');
+</script>
+</body>
+</html>
